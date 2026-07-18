@@ -6,7 +6,6 @@ local plr = game:GetService("Players").LocalPlayer
 local WS = workspace
 
 local fState = {}
-local cConns = {}
 
 local function gC() return plr.Character end
 local function gH()
@@ -18,25 +17,29 @@ local function gHum()
     return c and c:FindFirstChildWhichIsA("Humanoid")
 end
 
-local function cUp(n, fn)
-    if cConns[n] then cConns[n]:Disconnect() end
-    if fn then cConns[n] = fn() end
-end
-
-local function safePos()
-    local h = gH()
-    return h and h.Position or Vector3.new()
-end
-
 -- click combat
 local function doAtk()
-    local ok, e = pcall(function() VIM:SendMouseButtonEvent(0, 0, 0, true) end)
-    if not ok then
-        pcall(function() mouse1press() end)
-    end
+    local ok = pcall(function() VIM:SendMouseButtonEvent(0, 0, 0, true) end)
+    if not ok then pcall(function() mouse1press() end) end
     task.wait(0.03)
     pcall(function() VIM:SendMouseButtonEvent(0, 0, 0, false) end)
     pcall(function() mouse1release() end)
+end
+
+local function findEnemy(r)
+    local h = gH(); if not h then return nil end
+    local hp = h.Position; local best, bd = nil, r or 300
+    for _, v in pairs(WS:GetChildren()) do
+        if v:IsA("Model") and v ~= gC() then
+            local vh = v:FindFirstChild("HumanoidRootPart")
+            local vm = v:FindFirstChildWhichIsA("Humanoid")
+            if vh and vm and vm.Health > 0 then
+                local d = (vh.Position - hp).Magnitude
+                if d < bd then bd = d; best = v end
+            end
+        end
+    end
+    return best
 end
 
 -- Autokill (throttled)
@@ -78,34 +81,17 @@ function togGod(on)
     end)
 end
 
--- Auto farm (throttled)
+-- Auto farm
 local farmCon
 function togFarm(on)
-    fState.farm = on
-    if farmCon then farmCon:Disconnect(); farmCon = nil end
+    fState.farm = on; if farmCon then farmCon:Disconnect(); farmCon = nil end
     if not on then return end
     farmCon = RS.Heartbeat:Connect(function()
         if not fState.farm then farmCon:Disconnect(); farmCon = nil; return end
-        local h = gH()
-        if not h then return end
-        local hp = h.Position
-        local best, bd = nil, fState.farmRad or 150
-        for _, v in pairs(WS:GetChildren()) do
-            if v:IsA("Model") and v ~= gC() then
-                local vh = v:FindFirstChild("HumanoidRootPart")
-                local vm = v:FindFirstChildWhichIsA("Humanoid")
-                if vh and vm and vm.Health > 0 then
-                    local d = (vh.Position - hp).Magnitude
-                    if d < bd then bd = d; best = v end
-                end
-            end
-        end
-        if best then
-            local bt = best:FindFirstChild("HumanoidRootPart")
-            if bt then
-                h.CFrame = CFrame.new(bt.Position + Vector3.new(0, 5, 0), bt.Position)
-                doAtk()
-            end
+        local e = findEnemy(fState.farmRad or 150)
+        if e then
+            local bt = e:FindFirstChild("HumanoidRootPart"); local h = gH()
+            if bt and h then h.CFrame = CFrame.new(bt.Position + Vector3.new(0,5,0), bt.Position); doAtk() end
         end
         task.wait(0.08)
     end)
@@ -227,11 +213,90 @@ local tpLocs = {
     {"Ravine", Vector3.new(-1000,50,-500)},
     {"Forest", Vector3.new(1500,50,-1000)},
     {"Ocean", Vector3.new(3000,50,0)},
+    {"Warrior", Vector3.new(-2000,50,1000)},
+    {"Akuma", Vector3.new(2500,50,-500)},
 }
+
+-- Aimbot
+local aimCon
+function togAim(on)
+    fState.aim = on; if aimCon then aimCon:Disconnect(); aimCon = nil end
+    if not on then return end
+    aimCon = RS.RenderStepped:Connect(function()
+        if not fState.aim then aimCon:Disconnect(); aimCon = nil; return end
+        local e = findEnemy(fState.aimRad or 300)
+        if e then
+            local bt = e:FindFirstChild("HumanoidRootPart"); local h = gH()
+            if bt and h then
+                local lp = bt.Position
+                h.CFrame = CFrame.new(h.Position, Vector3.new(lp.X, h.Position.Y, lp.Z))
+                if fState.aimAtk then doAtk() end
+            end
+        end
+        task.wait(0.03)
+    end)
+end
+
+-- Inf Stats
+function doInfStat()
+    local r = game:GetService("ReplicatedStorage"); local found = false
+    for _, v in pairs(r:GetDescendants()) do
+        if (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) then
+            local n = v.Name:lower()
+            if n:find("stat") or n:find("level") or n:find("skill") or n:find("upgrade") or n:find("data") then
+                pcall(function() for i=1,10 do v:FireServer(999999) v:FireServer("Stat",999999) v:FireServer("Add",999999) v:FireServer({Stat=999999}) task.wait(0.05) end end)
+                found = true
+            end
+        end
+    end
+    local pd = plr:FindFirstChild("PlayerData") or plr:FindFirstChild("Data") or plr:FindFirstChild("Stats")
+    if pd then for _,v in pairs(pd:GetDescendants()) do if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("FloatValue") then pcall(function() v.Value = 9e9 end) end end end
+    if not found then
+        local l = plr:FindFirstChild("leaderstats")
+        if l then for _,v in pairs(l:GetChildren()) do if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("FloatValue") then pcall(function() v.Value = 9e9 end) end end end
+    end
+    st.Text = found and "Stat hack fired!" or "Tried stat hack"
+    task.delay(2, function() upSt() end)
+end
+
+-- Auto Skill
+local skillCon
+function togSkill(on)
+    fState.skill = on; if skillCon then skillCon:Disconnect(); skillCon = nil end
+    if not on then return end
+    skillCon = RS.Heartbeat:Connect(function()
+        if not fState.skill then skillCon:Disconnect(); skillCon = nil; return end
+        local e = findEnemy(150)
+        if e then
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.One, false, nil) end) task.wait(0.1)
+            pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.One, false, nil) end) task.wait(0.1)
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.Two, false, nil) end) task.wait(0.1)
+            pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.Two, false, nil) end)
+        end
+        task.wait(0.5)
+    end)
+end
+
+-- Auto Dodge
+local dodgeCon
+function togDodge(on)
+    fState.dodge = on; if dodgeCon then dodgeCon:Disconnect(); dodgeCon = nil end
+    if not on then return end
+    dodgeCon = RS.Heartbeat:Connect(function()
+        if not fState.dodge then dodgeCon:Disconnect(); dodgeCon = nil; return end
+        local m = gHum()
+        if m and m.Health < m.MaxHealth * 0.6 then
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, nil) end) task.wait(0.05)
+            pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, nil) end)
+            m.Health = m.MaxHealth
+        end
+        task.wait(0.3)
+    end)
+end
 
 -- UI
 local gui = Instance.new("ScreenGui"); gui.Name = "SnqwSH"; gui.ResetOnSpawn = false; gui.Parent = plr:WaitForChild("PlayerGui")
-local bg = Instance.new("Frame"); bg.Size = UDim2.new(0,560,0,460); bg.Position = UDim2.new(0.5,-280,0.5,-230); bg.BackgroundColor3 = Color3.fromRGB(10,10,10); bg.BorderSizePixel = 0; bg.Active = true; bg.Draggable = true; bg.Parent = gui
+local bg = Instance.new("Frame"); bg.Size = UDim2.new(0,560,0,480); bg.Position = UDim2.new(0.5,-280,0.5,-240); bg.BackgroundColor3 = Color3.fromRGB(10,10,10); bg.BorderSizePixel = 0; bg.Active = true; bg.Draggable = true; bg.Parent = gui
 Instance.new("UICorner", bg).CornerRadius = UDim.new(0,8)
 local st = Instance.new("TextLabel", bg); st.Size = UDim2.new(1,-16,0,22); st.Position = UDim2.new(0,8,0,40); st.BackgroundTransparency = 1; st.Text = ""; st.TextColor3 = Color3.fromRGB(0,200,0); st.TextSize = 10; st.Font = Enum.Font.GothamBold; st.TextXAlignment = Enum.TextXAlignment.Left
 
@@ -246,9 +311,9 @@ Instance.new("UICorner", ctBg).CornerRadius = UDim.new(0,6)
 Instance.new("UIListLayout", side).Padding = UDim.new(0,3)
 
 local btns = {}; local conts = {}
-local tabs = {"COMBAT","FARM","MOVE","VISUAL","AUTO","MISC"}
+local tabs = {"COMBAT","FARM","MOVE","AIM","VISUAL","AUTO","MISC"}
 for i, n in ipairs(tabs) do
-    local b = Instance.new("TextButton", side); b.Size = UDim2.new(1,-6,0,30); b.BackgroundColor3 = i==1 and Color3.fromRGB(25,25,25) or Color3.fromRGB(15,15,15); b.BorderSizePixel = 0; b.Text = n; b.TextColor3 = i==1 and Color3.fromRGB(255,255,255) or Color3.fromRGB(130,130,130); b.TextSize = 11; b.Font = Enum.Font.GothamBold
+    local b = Instance.new("TextButton", side); b.Size = UDim2.new(1,-6,0,28); b.BackgroundColor3 = i==1 and Color3.fromRGB(25,25,25) or Color3.fromRGB(15,15,15); b.BorderSizePixel = 0; b.Text = n; b.TextColor3 = i==1 and Color3.fromRGB(255,255,255) or Color3.fromRGB(130,130,130); b.TextSize = 10; b.Font = Enum.Font.GothamBold
     Instance.new("UICorner", b).CornerRadius = UDim.new(0,5)
     b.MouseButton1Click:Connect(function()
         for j, v in ipairs(btns) do v.BackgroundColor3 = j==i and Color3.fromRGB(25,25,25) or Color3.fromRGB(15,15,15); v.TextColor3 = j==i and Color3.fromRGB(255,255,255) or Color3.fromRGB(130,130,130) end
@@ -284,7 +349,7 @@ local function mkTog(con, txt, get, set)
 end
 
 local function upSt()
-    st.Text = "K:"..tostring(fState.kill and "ON" or "OFF").." G:"..tostring(fState.god and "ON" or "OFF").." F:"..tostring(fState.farm and "ON" or "OFF").." E:"..tostring(fState.esp and "ON" or "OFF").." FL:"..tostring(fState.fly and "ON" or "OFF")
+    st.Text = "K:"..tostring(fState.kill and "ON" or "OFF").." G:"..tostring(fState.god and "ON" or "OFF").." F:"..tostring(fState.farm and "ON" or "OFF").." A:"..tostring(fState.aim and "ON" or "OFF").." E:"..tostring(fState.esp and "ON" or "OFF")
 end
 
 -- populate
@@ -319,33 +384,52 @@ spBtn = mkBtn(conts[3], "Speed Amt: 50", function()
 end)
 mkTog(conts[3], "Inf Jump", function() return fState.infJ end, function(v) fState.infJ = v end)
 
-mkTog(conts[4], "ESP", function() return fState.esp end, function(v) togESP(v); upSt() end)
-mkBtn(conts[4], "Fullbright", function()
+-- AIM
+mkTog(conts[4], "Aimbot", function() return fState.aim end, function(v) togAim(v); upSt() end)
+local arBtn = mkBtn(conts[4], "Aim Range: 300", function()
+    fState.aimRad = (fState.aimRad or 300) + 50; if fState.aimRad > 500 then fState.aimRad = 50 end
+    arBtn.Text = "Aim Range: "..fState.aimRad
+end)
+mkTog(conts[4], "Auto Atk", function() return fState.aimAtk end, function(v) fState.aimAtk = v end)
+
+mkTog(conts[5], "ESP", function() return fState.esp end, function(v) togESP(v); upSt() end)
+mkBtn(conts[5], "Fullbright", function()
     local l = game:GetService("Lighting")
     l.Brightness = 3; l.Ambient = Color3.fromRGB(255,255,255); l.OutdoorAmbient = Color3.fromRGB(255,255,255); l.ClockTime = 14; l.FogEnd = 1e5
 end)
 
+-- AUTO
+mkBtn(conts[6], "Inf Stats", function() doInfStat() end)
+mkTog(conts[6], "Auto Skill", function() return fState.skill end, function(v) togSkill(v) end)
+mkTog(conts[6], "Auto Dodge", function() return fState.dodge end, function(v) togDodge(v) end)
+mkBtn(conts[6], "Auto Spin", function()
+    local r = game:GetService("ReplicatedStorage")
+    for _, v in pairs(r:GetDescendants()) do
+        if v:IsA("RemoteEvent") and (v.Name:lower():find("spin") or v.Name:lower():find("blood")) then
+            pcall(function() for i=1,20 do v:FireServer() task.wait(0.1) end end)
+        end
+    end
+end)
+
 for _, loc in ipairs(tpLocs) do
-    mkBtn(conts[5], "TP "..loc[1], function()
+    mkBtn(conts[7], "TP "..loc[1], function()
         local h = gH()
         if h then h.CFrame = CFrame.new(loc[2]) end
     end)
 end
 
-mkBtn(conts[6], "Copy Loader", function()
+mkBtn(conts[7], "Copy Loader", function()
     pcall(function()
         setclipboard('loadstring(game:HttpGet("https://raw.githubusercontent.com/snqw293-eng/shindo-life/main/shindo_life.lua"))()')
     end)
 end)
-mkBtn(conts[6], "Quit", function()
-    for _, v in pairs(cConns) do pcall(function() v:Disconnect() end) end
-    cConns = {}
-    togKill(false); togGod(false); togFarm(false); togFly(false); togESP(false); togSpeed(false)
+mkBtn(conts[7], "Quit", function()
+    togKill(false); togGod(false); togFarm(false); togFly(false); togESP(false); togSpeed(false); togAim(false)
     if gui then gui:Destroy() end
 end)
 
 local ft = Instance.new("TextLabel", bg); ft.Size = UDim2.new(1,0,0,18); ft.Position = UDim2.new(0,6,1,-20); ft.BackgroundTransparency = 1; ft.Text = "snqw .0gh on discord"; ft.TextColor3 = Color3.fromRGB(70,70,70); ft.TextSize = 10; ft.Font = Enum.Font.Gotham
 upSt()
-bg.Position = UDim2.new(0.5,-280,0.55,-230)
-TS:Create(bg, TweenInfo.new(0.35), {Position = UDim2.new(0.5,-280,0.5,-230)}):Play()
-print("Snqw SH loaded - no lag")
+bg.Position = UDim2.new(0.5,-280,0.55,-240)
+TS:Create(bg, TweenInfo.new(0.35), {Position = UDim2.new(0.5,-280,0.5,-240)}):Play()
+print("Snqw SH loaded")
