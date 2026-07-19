@@ -431,7 +431,7 @@ end
 
 -- UI
 local gui = Instance.new("ScreenGui"); gui.Name = "SnqwSH"; gui.ResetOnSpawn = false; gui.Parent = plr:WaitForChild("PlayerGui")
-local bg = Instance.new("Frame"); bg.Size = UDim2.new(0,560,0,480); bg.Position = UDim2.new(0.5,-280,0.5,-240); bg.BackgroundColor3 = Color3.fromRGB(10,10,10); bg.BorderSizePixel = 0; bg.Active = true; bg.Draggable = true; bg.Parent = gui
+local bg = Instance.new("Frame"); bg.Size = UDim2.new(0,560,0,480); bg.Position = UDim2.new(0.5,-280,0.5,-240); bg.BackgroundColor3 = Color3.fromRGB(10,10,10); bg.BorderSizePixel = 0; bg.Active = true; bg.Parent = gui
 Instance.new("UICorner", bg).CornerRadius = UDim.new(0,8)
 local title = Instance.new("TextLabel", bg); title.Size = UDim2.new(1,0,0,40); title.BackgroundColor3 = Color3.fromRGB(15,15,15); title.BorderSizePixel = 0; title.Text = "SNQW .0GH"; title.TextColor3 = Color3.fromRGB(200,200,200); title.TextSize = 18; title.Font = Enum.Font.GothamBold
 Instance.new("UICorner", title).CornerRadius = UDim.new(0,8)
@@ -444,12 +444,12 @@ local btns = {}; local conts = {}
 for i, n in ipairs({"COMBAT","FARM","MOVE","AIM","VISUAL","AUTO","MISC"}) do
     local b = Instance.new("TextButton", side); b.Size = UDim2.new(1,-6,0,28); b.BackgroundColor3 = i==1 and Color3.fromRGB(25,25,25) or Color3.fromRGB(15,15,15); b.BorderSizePixel = 0; b.Text = n; b.TextColor3 = i==1 and Color3.fromRGB(255,255,255) or Color3.fromRGB(130,130,130); b.TextSize = 10; b.Font = Enum.Font.GothamBold
     Instance.new("UICorner", b).CornerRadius = UDim.new(0,5)
-    b.MouseButton1Click:Connect(function()
+    b.Activated:Connect(function()
         for j, v in ipairs(btns) do v.BackgroundColor3 = j==i and Color3.fromRGB(25,25,25) or Color3.fromRGB(15,15,15); v.TextColor3 = j==i and Color3.fromRGB(255,255,255) or Color3.fromRGB(130,130,130) end
         for j, v in ipairs(conts) do v.Visible = j==i end
     end)
     btns[i] = b
-    local f = Instance.new("ScrollingFrame", ctBg); f.Size = UDim2.new(1,-10,1,-8); f.Position = UDim2.new(0,5,0,4); f.BackgroundTransparency = 1; f.BorderSizePixel = 0; f.ScrollBarThickness = 2; f.CanvasSize = UDim2.new(0,0,0,0); f.Visible = i==1
+    local f = Instance.new("ScrollingFrame", ctBg); f.Size = UDim2.new(1,-10,1,-8); f.Position = UDim2.new(0,5,0,4); f.BackgroundTransparency = 1; f.BorderSizePixel = 0; f.ScrollBarThickness = 2; f.AutomaticCanvasSize = Enum.AutomaticSize.Y; f.Visible = i==1
     Instance.new("UIListLayout", f).Padding = UDim.new(0,3)
     conts[i] = f
 end
@@ -457,7 +457,7 @@ end
 local function mb(con, txt, cb)
     local b = Instance.new("TextButton", con); b.Size = UDim2.new(1,0,0,30); b.BackgroundColor3 = Color3.fromRGB(20,20,20); b.BorderSizePixel = 0; b.Text = txt; b.TextColor3 = Color3.fromRGB(200,200,200); b.TextSize = 13; b.Font = Enum.Font.Gotham
     Instance.new("UICorner", b).CornerRadius = UDim.new(0,5)
-    b.MouseButton1Click:Connect(cb); return b
+    b.Activated:Connect(cb); return b
 end
 
 local function mt(con, txt, get, set)
@@ -468,7 +468,7 @@ local function mt(con, txt, get, set)
     Instance.new("UICorner", tb).CornerRadius = UDim.new(0,9)
     local td = Instance.new("Frame", tb); td.Size = UDim2.new(0,14,0,14); td.Position = get() and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7); td.BackgroundColor3 = Color3.fromRGB(255,255,255); td.BorderSizePixel = 0
     Instance.new("UICorner", td).CornerRadius = UDim.new(0,7)
-    b.MouseButton1Click:Connect(function()
+    b.Activated:Connect(function()
         set(not get()); tb.BackgroundColor3 = get() and Color3.fromRGB(70,120,70) or Color3.fromRGB(35,35,35)
         td:TweenPosition(get() and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7), "Out", "Quad", 0.12, true)
     end); return b
