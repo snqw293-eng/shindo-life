@@ -139,7 +139,7 @@ class App:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Snqw Macro")
-        self.root.geometry("380+600+300")
+        self.root.geometry("380x600+300+100")
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.configure(bg="#1a1a1a")
