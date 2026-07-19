@@ -48,6 +48,62 @@ local function getMobs(r)
     return out
 end
 
+local function getBosses(r)
+    local h = gH(); if not h then return {} end
+    local hp = h.Position; local out = {}
+    local npc = WS:FindFirstChild("npc")
+    if npc then
+        for _, v in pairs(npc:GetChildren()) do
+            if v:IsA("Model") then
+                local vh = v:FindFirstChild("HumanoidRootPart")
+                local vm = v:FindFirstChildWhichIsA("Humanoid")
+                local n = v.Name:lower()
+                if vh and vm and vm.Health > 0 then
+                    local isBoss = n == "npc1" or n:find("boss") or n:find("mini") or vm.MaxHealth > 5000
+                    if isBoss and (vh.Position - hp).Magnitude <= (r or 500) then
+                        table.insert(out, {m = v, hrp = vh, hum = vm})
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
+local function getDrops(r)
+    local h = gH(); if not h then return {} end
+    local hp = h.Position; local out = {}
+    for _, v in pairs(WS:GetChildren()) do
+        local cd = v:FindFirstChildWhichIsA("ClickDetector")
+        if cd then
+            local pos
+            if v:IsA("BasePart") then
+                pos = v.Position
+            elseif v:IsA("Model") then
+                local pp = v.PrimaryPart or v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart")
+                if pp then pos = pp.Position end
+            end
+            if pos and (pos - hp).Magnitude <= (r or 100) then
+                table.insert(out, {m = v, pos = pos, cd = cd})
+            end
+        end
+    end
+    local gt = WS:FindFirstChild("GLOBALTIME")
+    if gt then
+        for _, v in pairs(gt:GetChildren()) do
+            if v:IsA("Model") and v:FindFirstChild("sh") then
+                local sh = v.sh
+                local invoke = sh:FindFirstChild("invoke")
+                local cd = sh:FindFirstChildWhichIsA("ClickDetector")
+                if (invoke or cd) and (sh.Position - hp).Magnitude <= (r or 500) then
+                    table.insert(out, {m = v, pos = sh.Position, invoke = invoke, cd = cd})
+                end
+            end
+        end
+    end
+    return out
+end
+
 local godCon
 function togGod(on)
     state.god = on
@@ -153,12 +209,6 @@ function togFarm(on)
                 farmTimer = 0
             end
         elseif farmPhase == "kill" then
-            local target
-            if mission and mission.Visible and mission:FindFirstChild("bg") and mission.bg:FindFirstChild("name") then
-                local txt = mission.bg.name.Text
-                target = txt:match("Defeat (.+) %(") or txt:match("Defeat (.+)")
-                if target then target = target:gsub("%(s%)","") end
-            end
             local mobs = getMobs(state.farmRad or 150)
             if #mobs > 0 then
                 local m = mobs[1]
@@ -199,6 +249,46 @@ function togFarm(on)
             farmTimer = 0
         end
         task.wait(0.1)
+    end)
+end
+
+local bossCon
+function togBoss(on)
+    state.boss = on; if bossCon then bossCon:Disconnect(); bossCon = nil end
+    if not on then return end
+    if not state.god then togGod(true) end
+    bossCon = RS.Heartbeat:Connect(function()
+        if not state.boss then bossCon:Disconnect(); bossCon = nil; return end
+        local h = gH(); if not h then return end
+        local bosses = getBosses(state.bossRad or 500)
+        if #bosses > 0 then
+            local b = bosses[1]
+            h.CFrame = CFrame.new(b.hrp.Position + Vector3.new(0,5,0), b.hrp.Position)
+            b.hum.Health = 0
+        end
+        task.wait(0.15)
+    end)
+end
+
+local lootCon
+function togLoot(on)
+    state.loot = on; if lootCon then lootCon:Disconnect(); lootCon = nil end
+    if not on then return end
+    lootCon = RS.Heartbeat:Connect(function()
+        if not state.loot then lootCon:Disconnect(); lootCon = nil; return end
+        local h = gH(); if not h then return end
+        local drops = getDrops(state.lootRad or 100)
+        for _, d in pairs(drops) do
+            h.CFrame = CFrame.new(d.pos + Vector3.new(0,3,0))
+            task.wait(0.05)
+            if d.invoke then
+                pcall(function() d.invoke:FireServer(plr) end)
+            end
+            if d.cd then
+                pcall(function() fireclickdetector(d.cd) end)
+            end
+        end
+        task.wait(0.3)
     end)
 end
 
@@ -480,17 +570,26 @@ sleepBtn = mkBtn(conts[2], "SLEEP MODE OFF", function()
     if state.sleep then
         togGod(true); togFarm(true); togRank(true); togAutoStat(true)
         togSkill(true); togDodge(true); togAfk(true); togKill(true)
+        togBoss(true); togLoot(true)
     else
         togGod(false); togFarm(false); togRank(false); togAutoStat(false)
         togSkill(false); togDodge(false); togAfk(false); togKill(false)
+        togBoss(false); togLoot(false)
     end
 end)
 mkTog(conts[2], "Auto Farm", function() return state.farm end, function(v) togFarm(v) end)
+mkTog(conts[2], "Auto Boss", function() return state.boss end, function(v) togBoss(v) end)
+mkTog(conts[2], "Auto Loot", function() return state.loot end, function(v) togLoot(v) end)
 mkTog(conts[2], "Auto Rank", function() return state.rank end, function(v) togRank(v) end)
 local frBtn
 frBtn = mkBtn(conts[2], "Range: 150", function()
     state.farmRad = (state.farmRad or 150) + 50; if state.farmRad > 400 then state.farmRad = 50 end
     frBtn.Text = "Range: "..state.farmRad
+end)
+local bossRadBtn
+bossRadBtn = mkBtn(conts[2], "Boss Range: 500", function()
+    state.bossRad = (state.bossRad or 500) + 100; if state.bossRad > 1500 then state.bossRad = 200 end
+    bossRadBtn.Text = "Boss Range: "..state.bossRad
 end)
 
 -- MOVE
@@ -555,6 +654,7 @@ mkBtn(conts[7], "Quit", function()
     state.sleep = false
     togKill(false); togGod(false); togFarm(false); togFly(false); togESP(false); togSpeed(false); togAim(false)
     togSkill(false); togDodge(false); togAfk(false); togAutoStat(false); togRank(false)
+    togBoss(false); togLoot(false)
     if gui then gui:Destroy() end
 end)
 
