@@ -108,11 +108,18 @@ local function doAtk()
     pcall(function()
         local c = gC()
         if c and c:FindFirstChild("combat") and c.combat:FindFirstChild("update") then
-            c.combat.update:FireServer("mouse1", true)
-            task.wait(0.03)
-            c.combat.update:FireServer("mouse1", false)
+            for i = 1, 3 do
+                c.combat.update:FireServer("mouse1", true)
+                task.wait(0.02)
+                c.combat.update:FireServer("mouse1", false)
+                task.wait(0.02)
+            end
         end
     end)
+    pcall(mouse1press)
+    task.wait(0.03)
+    pcall(mouse1release)
+    task.wait(0.03)
     pcall(function() VIM:SendMouseButtonEvent(0, 0, true, nil, 0) end)
     task.wait(0.03)
     pcall(function() VIM:SendMouseButtonEvent(0, 0, false, nil, 0) end)
@@ -126,7 +133,13 @@ local function killMob(m)
     end
     doAtk()
     m.hum.Health = 0
+    pcall(function()
+        m.hum.HealthChanged:Connect(function()
+            if m.hum and m.hum.Health > 0 then m.hum.Health = 0 end
+        end)
+    end)
 end
+
 function togGod(on)
     state.god = on
     if godCon then godCon:Disconnect(); godCon = nil end
