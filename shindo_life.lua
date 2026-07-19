@@ -19,8 +19,14 @@ local function gHum()
 end
 
 local statNames = {"Health","Chakra","Strength","Defense","Speed","Tai","Nin","Gen"}
+local mobCache = {}
+local mobCacheT = 0
+local statRemote
+local misGui
 
 local function getMobs(r)
+    local t = time()
+    if t - mobCacheT < 0.15 and mobCache.r == r then return mobCache.d end
     local h = gH(); if not h then return {} end
     local hp = h.Position; local out = {}
     local folders = {WS:FindFirstChild("npc"), WS:FindFirstChild("NPCs")}
@@ -37,6 +43,8 @@ local function getMobs(r)
             end
         end
     end
+    mobCache = {d = out, r = r}
+    mobCacheT = t
     return out
 end
 
@@ -198,12 +206,14 @@ local statCon
 function togAutoStat(on)
     state.autoStat = on; if statCon then statCon:Disconnect(); statCon = nil end
     if not on then return end
+    if not statRemote then
+        for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+            if v:IsA("RemoteEvent") and v.Name:lower():find("stat") then statRemote = v; break end
+        end
+    end
     statCon = RS.Heartbeat:Connect(function()
         if not state.autoStat then statCon:Disconnect(); statCon = nil; return end
-        local sr
-        for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-            if v:IsA("RemoteEvent") and v.Name:lower():find("stat") then sr = v; break end
-        end
+        if not statRemote then return end
         local points = 0
         local statz = plr:FindFirstChild("statz") or plr:FindFirstChild("Stats")
         if statz then
@@ -218,12 +228,10 @@ function togAutoStat(on)
         end
         if points and points > 0 then
             local per = math.max(1, math.floor(points / #statNames))
-            if sr then
-                for _, s in ipairs(statNames) do
-                    pcall(function() sr:FireServer(s, per) end) task.wait(0.02)
-                end
-                pcall(function() sr:FireServer("All", points) end)
+            for _, s in ipairs(statNames) do
+                pcall(function() statRemote:FireServer(s, per) end) task.wait(0.02)
             end
+            pcall(function() statRemote:FireServer("All", points) end)
         end
         task.wait(1)
     end)
