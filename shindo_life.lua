@@ -171,22 +171,23 @@ local togKill = tog("kill", function()
 end)
 
 local togFarm = (function()
-    local con; local phase = "quest"; local timer = 0; local mgs; local qTarget = ""
+    local con; local phase = "quest"; local timer = 0
     return function(on)
         if con then con:Disconnect(); con = nil end
         if not on then s.farm = false; return end
-        s.farm = true; phase = "quest"; timer = 0; qTarget = ""
+        s.farm = true; phase = "quest"; timer = 0
         if not s.god then togGod(true) end
         con = RS.Heartbeat:Connect(function()
             if not s.farm then con:Disconnect(); con = nil; return end
             local h = ghr(); if not h then return end
-            timer = timer + 1; mgs = WS:FindFirstChild("missiongivers")
+            timer = timer + 1
             if phase == "quest" then
+                local mgs = WS:FindFirstChild("missiongivers")
                 if mgs then
                     for _, v in pairs(mgs:GetChildren()) do
-                        if v:IsA("Model") and v:FindFirstChild("Head") and v.Head:FindFirstChild("givemission") and v.Head.givemission.Enabled then
+                        if v:IsA("Model") and v.Name == "" and v:FindFirstChild("Head") and v.Head:FindFirstChild("givemission") and v.Head.givemission.Enabled then
                             local ci = v.Head.givemission:FindFirstChild("color")
-                            if ci and (ci.Image:find("5459241648") or ci.Image:find("5459241799")) then
+                            if ci and ci.Image:find("5459241648") then
                                 local mgp = v:FindFirstChild("HumanoidRootPart")
                                 local ct = v:FindFirstChild("CLIENTTALK")
                                 if mgp and ct then
@@ -200,58 +201,25 @@ local togFarm = (function()
                 end
             elseif phase == "accepting" then
                 local ms = plr.PlayerGui:FindFirstChild("Main") and plr.PlayerGui.Main:FindFirstChild("ingame") and plr.PlayerGui.Main.ingame:FindFirstChild("Missionstory")
-                if ms and ms.Visible then
-                    local nl = ms:FindFirstChild("bg") and ms.bg:FindFirstChild("name")
-                    if nl then
-                        local t = nl.Text or ""
-                        local s, _ = t:find("%(")
-                        qTarget = s and t:sub(1, s - 2):lower() or t:lower()
-                    end
-                    phase = "kill"; timer = 0
+                if ms and ms.Visible then phase = "kill"; timer = 0
                 elseif timer > 60 then phase = "quest"; timer = 0 end
             elseif phase == "kill" then
-                local qm = {}
-                local npc = WS:FindFirstChild("npc") or WS:FindFirstChild("NPCs")
-                if npc and qTarget ~= "" then
-                    for _, v in pairs(npc:GetChildren()) do
-                        if v:IsA("Model") and not v.Name:lower():find("npc1") and v.Name:lower():find(qTarget) and v ~= gc() then
-                            local vh = v:FindFirstChild("HumanoidRootPart")
-                            local vm = v:FindFirstChildWhichIsA("Humanoid")
-                            if vh and vm and vm.Health > 0 then
-                                table.insert(qm, {m = v, hrp = vh, hum = vm})
-                            end
+                local qm = getMobs(s.farmRad or 150)
+                if #qm > 0 then
+                    killM(qm[1])
+                elseif timer > 600 then
+                    local mgs = WS:FindFirstChild("missiongivers")
+                    if mgs then
+                        local mg = mgs:FindFirstChildWhichIsA("Model")
+                        if mg then
+                            local mgp = mg:FindFirstChild("HumanoidRootPart")
+                            if mgp then h.CFrame = CFrame.new(mgp.Position + Vector3.new(0,5,0)) end
                         end
                     end
-                end
-                if #qm == 0 then qm = getMobs(s.farmRad or 150) end
-                if #qm > 0 then killM(qm[1]) end
-                if #qm == 0 and mgs then
-                    local mg = mgs:FindFirstChildWhichIsA("Model")
-                    if mg then
-                        local mgp = mg:FindFirstChild("HumanoidRootPart")
-                        if mgp and (h.Position - mgp.Position).Magnitude > 80 then
-                            h.CFrame = CFrame.new(mgp.Position + Vector3.new(0,5,0))
-                        end
-                    end
+                    phase = "quest"; timer = 0
                 end
                 local ms = plr.PlayerGui:FindFirstChild("Main") and plr.PlayerGui.Main:FindFirstChild("ingame") and plr.PlayerGui.Main.ingame:FindFirstChild("Missionstory")
-                if ms and not ms.Visible then phase = "turnin"; timer = 0 end
-                if timer > 900 then phase = "turnin"; timer = 0 end
-            elseif phase == "turnin" then
-                if mgs then
-                    for _, v in pairs(mgs:GetChildren()) do
-                        if v:IsA("Model") then
-                            local mgp = v:FindFirstChild("HumanoidRootPart")
-                            local ct = v:FindFirstChild("CLIENTTALK")
-                            if mgp and ct then
-                                h.CFrame = CFrame.new(mgp.Position + Vector3.new(0,5,0))
-                                ct:FireServer(); task.wait(0.1); ct:FireServer("accept")
-                                qTarget = ""; break
-                            end
-                        end
-                    end
-                end
-                task.wait(0.3); phase = "quest"; timer = 0
+                if ms and not ms.Visible then phase = "quest"; timer = 0 end
             end
             task.wait(0.12)
         end)
