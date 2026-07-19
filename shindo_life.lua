@@ -4,6 +4,7 @@ local TS = game:GetService("TweenService")
 local VIM = game:GetService("VirtualInputManager")
 local plr = game:GetService("Players").LocalPlayer
 local WS = workspace
+local vu = game:GetService("VirtualUser")
 
 local fState = {}
 
@@ -17,57 +18,73 @@ local function gHum()
     return c and c:FindFirstChildWhichIsA("Humanoid")
 end
 
--- click combat
-local function doAtk()
-    local ok = pcall(function() VIM:SendMouseButtonEvent(0, 0, 0, true) end)
-    if not ok then pcall(function() mouse1press() end) end
-    task.wait(0.03)
-    pcall(function() VIM:SendMouseButtonEvent(0, 0, 0, false) end)
-    pcall(function() mouse1release() end)
-end
-
-local function findEnemy(r)
-    local h = gH(); if not h then return nil end
-    local hp = h.Position; local best, bd = nil, r or 300
-    for _, v in pairs(WS:GetChildren()) do
-        if v:IsA("Model") and v ~= gC() then
-            local vh = v:FindFirstChild("HumanoidRootPart")
-            local vm = v:FindFirstChildWhichIsA("Humanoid")
-            if vh and vm and vm.Health > 0 then
-                local d = (vh.Position - hp).Magnitude
-                if d < bd then bd = d; best = v end
+-- find all mobs within range (checks npc folders + workspace)
+local function getMobs(r)
+    local h = gH(); if not h then return {} end
+    local hp = h.Position; local out = {}
+    local folders = {WS:FindFirstChild("npc"), WS:FindFirstChild("NPCs"), WS:FindFirstChild("Mobs"), WS:FindFirstChild("Enemies")}
+    for _, f in pairs(folders) do
+        if f then
+            for _, v in pairs(f:GetChildren()) do
+                if v:IsA("Model") and v ~= gC() then
+                    local vh = v:FindFirstChild("HumanoidRootPart")
+                    local vm = v:FindFirstChildWhichIsA("Humanoid")
+                    if vh and vm and vm.Health > 0 and (vh.Position - hp).Magnitude <= (r or 300) then
+                        table.insert(out, {model = v, hrp = vh, hum = vm})
+                    end
+                end
             end
         end
     end
-    return best
+    for _, v in pairs(WS:GetChildren()) do
+        if v:IsA("Model") and v ~= gC() then
+            local inFolder = false
+            for _, f in pairs(folders) do if f and v.Parent == f then inFolder = true; break end end
+            if not inFolder then
+                local vh = v:FindFirstChild("HumanoidRootPart")
+                local vm = v:FindFirstChildWhichIsA("Humanoid")
+                if vh and vm and vm.Health > 0 and (vh.Position - hp).Magnitude <= (r or 300) then
+                    table.insert(out, {model = v, hrp = vh, hum = vm})
+                end
+            end
+        end
+    end
+    return out
 end
 
--- Autokill (throttled)
+local function findEnemy(r)
+    local mobs = getMobs(r)
+    if #mobs == 0 then return nil, nil end
+    local best = mobs[1]
+    return best.model, best.hrp
+end
+
+-- Autokill (tp to nearest monster + kill it + keep player alive)
 local killCon
 function togKill(on)
     fState.kill = on
     if killCon then killCon:Disconnect(); killCon = nil end
     if not on then return end
+    -- also enable god mode so player doesnt die
+    if not fState.god then togGod(true) end
     killCon = RS.Heartbeat:Connect(function()
         if not fState.kill then killCon:Disconnect(); killCon = nil; return end
         local h = gH()
         if not h then return end
-        local hp = h.Position
         local r = fState.killRad or 200
-        for _, v in pairs(WS:GetChildren()) do
-            if v:IsA("Model") and v ~= gC() then
-                local vh = v:FindFirstChild("HumanoidRootPart")
-                local vm = v:FindFirstChildWhichIsA("Humanoid")
-                if vh and vm and vm.Health > 0 and (vh.Position - hp).Magnitude <= r then
-                    vm.Health = 0
-                end
-            end
+        local mobs = getMobs(r)
+        if #mobs > 0 then
+            local m = mobs[1]
+            -- tp to the monster
+            h.CFrame = CFrame.new(m.hrp.Position + Vector3.new(0,3,0), m.hrp.Position)
+            -- kill it
+            m.hum.Health = 0
         end
-        task.wait(0.1)
+        task.wait(0.08)
     end)
 end
 
--- God mode (throttled)
+-- God mode
 local godCon
 function togGod(on)
     fState.god = on
@@ -81,19 +98,28 @@ function togGod(on)
     end)
 end
 
--- Auto farm
+-- Auto farm (kill mobs + teleport to them)
 local farmCon
 function togFarm(on)
     fState.farm = on; if farmCon then farmCon:Disconnect(); farmCon = nil end
     if not on then return end
     farmCon = RS.Heartbeat:Connect(function()
         if not fState.farm then farmCon:Disconnect(); farmCon = nil; return end
-        local e = findEnemy(fState.farmRad or 150)
-        if e then
-            local bt = e:FindFirstChild("HumanoidRootPart"); local h = gH()
-            if bt and h then h.CFrame = CFrame.new(bt.Position + Vector3.new(0,5,0), bt.Position); doAtk() end
+        local h = gH(); if not h then return end
+        local r = fState.farmRad or 150
+        local mobs = getMobs(r)
+        if #mobs > 0 then
+            local mob = mobs[1]
+            h.CFrame = CFrame.new(mob.hrp.Position + Vector3.new(0,5,0), mob.hrp.Position)
+            mob.hum.Health = 0
+        else
+            -- try finding quest mobs further out
+            local far = getMobs(fState.farmRad and fState.farmRad * 3 or 500)
+            if #far > 0 then
+                h.CFrame = CFrame.new(far[1].hrp.Position + Vector3.new(0,10,0), far[1].hrp.Position)
+            end
         end
-        task.wait(0.08)
+        task.wait(0.1)
     end)
 end
 
@@ -224,39 +250,113 @@ function togAim(on)
     if not on then return end
     aimCon = RS.RenderStepped:Connect(function()
         if not fState.aim then aimCon:Disconnect(); aimCon = nil; return end
-        local e = findEnemy(fState.aimRad or 300)
-        if e then
-            local bt = e:FindFirstChild("HumanoidRootPart"); local h = gH()
-            if bt and h then
+        local e, bt = findEnemy(fState.aimRad or 300)
+        if e and bt then
+            local h = gH()
+            if h then
                 local lp = bt.Position
                 h.CFrame = CFrame.new(h.Position, Vector3.new(lp.X, h.Position.Y, lp.Z))
-                if fState.aimAtk then doAtk() end
+                if fState.aimAtk then
+                    pcall(function() VIM:SendMouseButtonEvent(0, 0, true, nil, 0) end) task.wait(0.05)
+                    pcall(function() VIM:SendMouseButtonEvent(0, 0, false, nil, 0) end)
+                end
             end
         end
         task.wait(0.03)
     end)
 end
 
--- Inf Stats
-function doInfStat()
-    local r = game:GetService("ReplicatedStorage"); local found = false
-    for _, v in pairs(r:GetDescendants()) do
-        if (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) then
-            local n = v.Name:lower()
-            if n:find("stat") or n:find("level") or n:find("skill") or n:find("upgrade") or n:find("data") then
-                pcall(function() for i=1,10 do v:FireServer(999999) v:FireServer("Stat",999999) v:FireServer("Add",999999) v:FireServer({Stat=999999}) task.wait(0.05) end end)
-                found = true
+-- Anti-AFK
+local afkCon
+function togAfk(on)
+    fState.afk = on; if afkCon then afkCon:Disconnect(); afkCon = nil end
+    if not on then return end
+    afkCon = plr.Idled:Connect(function()
+        vu:CaptureController()
+        vu:ClickButton2(Vector2.new())
+    end)
+end
+
+-- Auto Stat (distributes stat points equally)
+local statCon
+local statNames = {"Health","Chakra","Strength","Defense","Speed","Tai","Nin","Gen","Stamina","Agility"}
+function togAutoStat(on)
+    fState.autoStat = on; if statCon then statCon:Disconnect(); statCon = nil end
+    if not on then return end
+    statCon = RS.Heartbeat:Connect(function()
+        if not fState.autoStat then statCon:Disconnect(); statCon = nil; return end
+        local rs = game:GetService("ReplicatedStorage")
+
+        -- find the stat remote
+        local sr
+        for _, v in pairs(rs:GetDescendants()) do
+            if v:IsA("RemoteEvent") then
+                local n = v.Name:lower()
+                if n == "statremote" or n == "stats" or n == "stat" or n == "updatestats" or n:find("stat") then
+                    sr = v; break
+                end
             end
         end
-    end
-    local pd = plr:FindFirstChild("PlayerData") or plr:FindFirstChild("Data") or plr:FindFirstChild("Stats")
-    if pd then for _,v in pairs(pd:GetDescendants()) do if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("FloatValue") then pcall(function() v.Value = 9e9 end) end end end
-    if not found then
-        local l = plr:FindFirstChild("leaderstats")
-        if l then for _,v in pairs(l:GetChildren()) do if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("FloatValue") then pcall(function() v.Value = 9e9 end) end end end
-    end
-    st.Text = found and "Stat hack fired!" or "Tried stat hack"
-    task.delay(2, function() upSt() end)
+        local se = plr:FindFirstChild("startevent") or plr:FindFirstChild("StatEvent")
+
+        -- read remaining stat points
+        local points = 0
+        local statz = plr:FindFirstChild("statz") or plr:FindFirstChild("Stats") or plr:FindFirstChild("PlayerData")
+        if statz then
+            for _, v in pairs(statz:GetDescendants()) do
+                if (v:IsA("NumberValue") or v:IsA("IntValue")) then
+                    local n = v.Name:lower()
+                    if n == "statpoints" or n == "points" or n == "skillpoints" or n == "sp" then
+                        points = v.Value; break
+                    end
+                end
+            end
+        end
+        if points == 0 then
+            for _, v in pairs(plr:GetChildren()) do
+                if v:IsA("NumberValue") or v:IsA("IntValue") then
+                    local n = v.Name:lower()
+                    if n == "statpoints" or n == "points" or n == "skillpoints" or n == "sp" then
+                        points = v.Value; break
+                    end
+                end
+            end
+        end
+
+        if points and points > 0 then
+            local per = math.floor(points / #statNames)
+            if per < 1 then per = 1 end
+
+            if sr then
+                for _, s in ipairs(statNames) do
+                    pcall(function() sr:FireServer(s, per) end) task.wait(0.02)
+                    pcall(function() sr:FireServer(s, tonumber(per)) end) task.wait(0.02)
+                end
+                -- also dump all remaining at once
+                pcall(function() sr:FireServer("All", points) end) task.wait(0.02)
+            end
+
+            if se then
+                for _, s in ipairs(statNames) do
+                    pcall(function() se:FireServer("addstat", s, per) end) task.wait(0.02)
+                end
+                pcall(function() se:FireServer("addstat", "All", points) end) task.wait(0.02)
+            end
+
+            -- fallback: set leaderstats directly
+            if not sr and not se then
+                local l = plr:FindFirstChild("leaderstats")
+                if l then
+                    for _, v in pairs(l:GetChildren()) do
+                        if (v:IsA("NumberValue") or v:IsA("IntValue")) and v.Name ~= "StatPoints" and v.Name ~= "Points" then
+                            pcall(function() v.Value = v.Value + per end)
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(0.5)
+    end)
 end
 
 -- Auto Skill
@@ -266,11 +366,11 @@ function togSkill(on)
     if not on then return end
     skillCon = RS.Heartbeat:Connect(function()
         if not fState.skill then skillCon:Disconnect(); skillCon = nil; return end
-        local e = findEnemy(150)
-        if e then
-            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.One, false, nil) end) task.wait(0.1)
-            pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.One, false, nil) end) task.wait(0.1)
-            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.Two, false, nil) end) task.wait(0.1)
+        local mobs = getMobs(200)
+        if #mobs > 0 then
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.One, false, nil) end) task.wait(0.08)
+            pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.One, false, nil) end) task.wait(0.08)
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.Two, false, nil) end) task.wait(0.08)
             pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.Two, false, nil) end)
         end
         task.wait(0.5)
@@ -399,7 +499,7 @@ mkBtn(conts[5], "Fullbright", function()
 end)
 
 -- AUTO
-mkBtn(conts[6], "Inf Stats", function() doInfStat() end)
+mkTog(conts[6], "Auto Stat", function() return fState.autoStat end, function(v) togAutoStat(v) end)
 mkTog(conts[6], "Auto Skill", function() return fState.skill end, function(v) togSkill(v) end)
 mkTog(conts[6], "Auto Dodge", function() return fState.dodge end, function(v) togDodge(v) end)
 mkBtn(conts[6], "Auto Spin", function()
@@ -410,6 +510,8 @@ mkBtn(conts[6], "Auto Spin", function()
         end
     end
 end)
+
+mkTog(conts[7], "Anti-AFK", function() return fState.afk end, function(v) togAfk(v) end)
 
 for _, loc in ipairs(tpLocs) do
     mkBtn(conts[7], "TP "..loc[1], function()
@@ -425,6 +527,7 @@ mkBtn(conts[7], "Copy Loader", function()
 end)
 mkBtn(conts[7], "Quit", function()
     togKill(false); togGod(false); togFarm(false); togFly(false); togESP(false); togSpeed(false); togAim(false)
+    togSkill(false); togDodge(false); togAfk(false); togAutoStat(false)
     if gui then gui:Destroy() end
 end)
 
