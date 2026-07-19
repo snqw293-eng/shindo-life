@@ -465,6 +465,18 @@ krBtn = mkBtn(conts[1], "Range: 200", function()
 end)
 
 -- FARM
+local sleepBtn
+sleepBtn = mkBtn(conts[2], "SLEEP MODE OFF", function()
+    state.sleep = not state.sleep
+    sleepBtn.Text = state.sleep and "SLEEP MODE ON" or "SLEEP MODE OFF"
+    if state.sleep then
+        togGod(true); togFarm(true); togRank(true); togAutoStat(true)
+        togSkill(true); togDodge(true); togAfk(true); togKill(true)
+    else
+        togGod(false); togFarm(false); togRank(false); togAutoStat(false)
+        togSkill(false); togDodge(false); togAfk(false); togKill(false)
+    end
+end)
 mkTog(conts[2], "Auto Farm", function() return state.farm end, function(v) togFarm(v) end)
 mkTog(conts[2], "Auto Rank", function() return state.rank end, function(v) togRank(v) end)
 local frBtn
@@ -532,6 +544,7 @@ mkBtn(conts[7], "Copy Loader", function()
     end)
 end)
 mkBtn(conts[7], "Quit", function()
+    state.sleep = false
     togKill(false); togGod(false); togFarm(false); togFly(false); togESP(false); togSpeed(false); togAim(false)
     togSkill(false); togDodge(false); togAfk(false); togAutoStat(false); togRank(false)
     if gui then gui:Destroy() end
