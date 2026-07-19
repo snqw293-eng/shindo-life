@@ -164,11 +164,52 @@ local farmPhase = "quest"
 local farmTimer = 0
 local mission
 
+local function findMis()
+    local m = plr.PlayerGui:FindFirstChild("Main")
+    if m then
+        local ig = m:FindFirstChild("ingame")
+        if ig then return ig:FindFirstChild("Missionstory") end
+    end
+end
+
+local function getQTarget()
+    local ms = findMis()
+    if not ms or not ms.Visible then return nil end
+    local bg = ms:FindFirstChild("bg")
+    if not bg then return nil end
+    local nm = bg:FindFirstChild("name")
+    if not nm then return nil end
+    local txt = nm.Text
+    local t = txt:match("Defeat (.+) %(") or txt:match("Defeat (.+)")
+    if t then return t:gsub("%(s%)",""):lower() end
+    return nil
+end
+
+local function findQMobs(target, r)
+    local h = gH(); if not h or not target then return {} end
+    local hp = h.Position; local out = {}
+    local npc = WS:FindFirstChild("npc")
+    if npc then
+        for _, v in pairs(npc:GetChildren()) do
+            if v:IsA("Model") then
+                local vh = v:FindFirstChild("HumanoidRootPart")
+                local vm = v:FindFirstChildWhichIsA("Humanoid")
+                local n = v.Name:lower()
+                if vh and vm and vm.Health > 0 and (vh.Position - hp).Magnitude <= (r or 400) then
+                    if n:find(target) or target:find(n) then
+                        table.insert(out, {m = v, hrp = vh, hum = vm})
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 function togFarm(on)
     state.farm = on; if farmCon then farmCon:Disconnect(); farmCon = nil end
     if not on then farmPhase = "quest"; farmTimer = 0; return end
     if not state.god then togGod(true) end
-    mission = plr.PlayerGui:FindFirstChild("Main") and plr.PlayerGui.Main:FindFirstChild("ingame") and plr.PlayerGui.Main.ingame:FindFirstChild("Missionstory")
     farmCon = RS.Heartbeat:Connect(function()
         if not state.farm then farmCon:Disconnect(); farmCon = nil; return end
         local h = gH(); if not h then return end
@@ -201,26 +242,38 @@ function togFarm(on)
                 end
             end
         elseif farmPhase == "accepting" then
-            if mission and mission.Visible then
+            local ms = findMis()
+            if ms and ms.Visible then
                 farmPhase = "kill"
                 farmTimer = 0
-            elseif farmTimer > 50 then
+            elseif farmTimer > 60 then
                 farmPhase = "quest"
                 farmTimer = 0
             end
         elseif farmPhase == "kill" then
-            local mobs = getMobs(state.farmRad or 150)
-            if #mobs > 0 then
-                local m = mobs[1]
+            local target = getQTarget()
+            local qmobs = target and findQMobs(target, state.farmRad or 200)
+            if #qmobs > 0 then
+                local m = qmobs[1]
                 h.CFrame = CFrame.new(m.hrp.Position + Vector3.new(0,3,0), m.hrp.Position)
                 m.hum.Health = 0
+                pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.One, false, nil) end)
+                task.wait(0.05)
+                pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.One, false, nil) end)
             else
-                local far = getMobs(600)
-                if #far > 0 then
-                    h.CFrame = CFrame.new(far[1].hrp.Position + Vector3.new(0,10,0))
+                -- no quest mobs found, stay near mission givers
+                if mgs and farmTimer < 30 then
+                    local mg = mgs:FindFirstChildWhichIsA("Model")
+                    if mg then
+                        local mgp = mg:FindFirstChild("HumanoidRootPart")
+                        if mgp and (h.Position - mgp.Position).Magnitude > 100 then
+                            h.CFrame = CFrame.new(mgp.Position + Vector3.new(0,5,0))
+                        end
+                    end
                 end
             end
-            if mission and not mission.Visible then
+            local ms = findMis()
+            if ms and not ms.Visible then
                 farmPhase = "turnin"
                 farmTimer = 0
             end
@@ -248,7 +301,7 @@ function togFarm(on)
             farmPhase = "quest"
             farmTimer = 0
         end
-        task.wait(0.1)
+        task.wait(0.12)
     end)
 end
 
