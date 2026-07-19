@@ -7,6 +7,29 @@ local WS = workspace
 local vu = game:GetService("VirtualUser")
 
 local state = {}
+local macroCfg = nil
+local macroCfgT = 0
+
+local function pullCfg()
+    local t = time()
+    if t - macroCfgT < 1 then return macroCfg end
+    macroCfgT = t
+    local s, r = pcall(function()
+        return game:HttpGet("http://127.0.0.1:18723/config")
+    end)
+    if s and r and r ~= "" then
+        local d = pcall(function() macroCfg = game:GetService("HttpService"):JSONDecode(r) end)
+        return macroCfg
+    end
+    macroCfg = nil
+    return nil
+end
+
+local function cfgBool(k, fallback)
+    local c = pullCfg()
+    if c and c[k] ~= nil then return c[k] end
+    return fallback
+end
 
 local function gC() return plr.Character end
 local function gH()
@@ -649,11 +672,11 @@ sleepBtn = mkBtn(conts[2], "SLEEP MODE OFF", function()
     if state.sleep then
         togGod(true); togFarm(true); togRank(true); togAutoStat(true)
         togSkill(true); togDodge(true); togAfk(true); togKill(true)
-        togBoss(true); togLoot(true)
+        togBoss(true); togLoot(true); togSpinB(true); togSpinE(true); togBuy(true)
     else
         togGod(false); togFarm(false); togRank(false); togAutoStat(false)
         togSkill(false); togDodge(false); togAfk(false); togKill(false)
-        togBoss(false); togLoot(false)
+        togBoss(false); togLoot(false); togSpinB(false); togSpinE(false); togBuy(false)
     end
 end)
 mkTog(conts[2], "Auto Farm", function() return state.farm end, function(v) togFarm(v) end)
@@ -702,17 +725,69 @@ mkBtn(conts[5], "Fullbright", function()
     l.Brightness = 3; l.Ambient = Color3.fromRGB(255,255,255); l.OutdoorAmbient = Color3.fromRGB(255,255,255); l.ClockTime = 14; l.FogEnd = 1e5
 end)
 
--- AUTO
+-- AUTO SPIN BLOODLINE
+local spinCon
+function togSpinB(on)
+    state.spinB = on; if spinCon then spinCon:Disconnect(); spinCon = nil end
+    if not on then return end
+    spinCon = RS.Heartbeat:Connect(function()
+        if not state.spinB then spinCon:Disconnect(); spinCon = nil; return end
+        local sp = plr.statz and plr.statz.spins and plr.statz.spins.Value
+        local se = plr:FindFirstChild("startevent")
+        if se and sp and sp > 0 then
+            pcall(function() se:FireServer("spin", "kg1") end) task.wait(0.3)
+            pcall(function() se:FireServer("spin", "kg2") end) task.wait(0.3)
+        end
+        task.wait(0.5)
+    end)
+end
+
+-- AUTO SPIN ELEMENT
+local spinECon
+function togSpinE(on)
+    state.spinE = on; if spinECon then spinECon:Disconnect(); spinECon = nil end
+    if not on then return end
+    spinECon = RS.Heartbeat:Connect(function()
+        if not state.spinE then spinECon:Disconnect(); spinECon = nil; return end
+        local sp = plr.statz and plr.statz.spins and plr.statz.spins.Value
+        local se = plr:FindFirstChild("startevent")
+        if se and sp and sp > 0 then
+            pcall(function() se:FireServer("spin", "element1") end) task.wait(0.3)
+            pcall(function() se:FireServer("spin", "element2") end) task.wait(0.3)
+        end
+        task.wait(0.5)
+    end)
+end
+
+-- AUTO BUY ABILITIES
+local buyCon
+function togBuy(on)
+    state.buy = on; if buyCon then buyCon:Disconnect(); buyCon = nil end
+    if not on then return end
+    buyCon = RS.Heartbeat:Connect(function()
+        if not state.buy then buyCon:Disconnect(); buyCon = nil; return end
+        local h = gH(); if not h then return end
+        for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+                local n = v.Name:lower()
+                if n:find("buy") or n:find("shop") or n:find("purchase") or n:find("element") or n:find("ability") then
+                    pcall(function() v:FireServer("Buy", "Element") end)
+                    pcall(function() v:FireServer("Buy", "Ability") end)
+                    pcall(function() v:FireServer("Purchase", "All") end)
+                    pcall(function() v:InvokeServer("BuyAll") end)
+                end
+            end
+        end
+        task.wait(3)
+    end)
+end
 mkTog(conts[6], "Auto Stat", function() return state.autoStat end, function(v) togAutoStat(v) end)
 mkTog(conts[6], "Auto Skill", function() return state.skill end, function(v) togSkill(v) end)
 mkTog(conts[6], "Auto Dodge", function() return state.dodge end, function(v) togDodge(v) end)
-mkBtn(conts[6], "Auto Spin", function()
-    for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-        if v:IsA("RemoteEvent") and (v.Name:lower():find("spin") or v.Name:lower():find("blood")) then
-            pcall(function() for i=1,20 do v:FireServer() task.wait(0.1) end end)
-        end
-    end
-end)
+mkTog(conts[6], "Spin BL", function() return state.spinB end, function(v) togSpinB(v) end)
+mkTog(conts[6], "Spin Element", function() return state.spinE end, function(v) togSpinE(v) end)
+mkTog(conts[6], "Auto Buy", function() return state.buy end, function(v) togBuy(v) end)
+
 
 -- MISC
 mkTog(conts[7], "Anti-AFK", function() return state.afk end, function(v) togAfk(v) end)
@@ -733,7 +808,7 @@ mkBtn(conts[7], "Quit", function()
     state.sleep = false
     togKill(false); togGod(false); togFarm(false); togFly(false); togESP(false); togSpeed(false); togAim(false)
     togSkill(false); togDodge(false); togAfk(false); togAutoStat(false); togRank(false)
-    togBoss(false); togLoot(false)
+    togBoss(false); togLoot(false); togSpinB(false); togSpinE(false); togBuy(false)
     if gui then gui:Destroy() end
 end)
 
