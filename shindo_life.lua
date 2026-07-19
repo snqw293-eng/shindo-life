@@ -98,25 +98,85 @@ function togGod(on)
     end)
 end
 
--- Auto farm (kill mobs + teleport to them)
+-- Auto farm (quests: accept -> kill -> turn in)
 local farmCon
+local farmPhase = "quest" -- quest -> kill -> turnin
+local farmTimer = 0
 function togFarm(on)
     fState.farm = on; if farmCon then farmCon:Disconnect(); farmCon = nil end
-    if not on then return end
+    if not on then farmPhase = "quest"; farmTimer = 0; return end
+    if not fState.god then togGod(true) end
     farmCon = RS.Heartbeat:Connect(function()
         if not fState.farm then farmCon:Disconnect(); farmCon = nil; return end
         local h = gH(); if not h then return end
-        local r = fState.farmRad or 150
-        local mobs = getMobs(r)
-        if #mobs > 0 then
-            local mob = mobs[1]
-            h.CFrame = CFrame.new(mob.hrp.Position + Vector3.new(0,5,0), mob.hrp.Position)
-            mob.hum.Health = 0
-        else
-            -- try finding quest mobs further out
-            local far = getMobs(fState.farmRad and fState.farmRad * 3 or 500)
-            if #far > 0 then
-                h.CFrame = CFrame.new(far[1].hrp.Position + Vector3.new(0,10,0), far[1].hrp.Position)
+        farmTimer = farmTimer + 1
+
+        -- find talk remote and mission givers
+        local ct = plr:FindFirstChild("CLIENTTALK") or game:GetService("ReplicatedStorage"):FindFirstChild("CLIENTTALK")
+        local mgs = WS:FindFirstChild("missiongivers") or WS:FindFirstChild("MissionGivers")
+
+        if farmPhase == "quest" then
+            -- tp to mission giver and accept quest
+            if mgs then
+                local mg = mgs:FindFirstChildWhichIsA("Model")
+                if mg then
+                    local mgp = mg:FindFirstChild("HumanoidRootPart") or mg:FindFirstChildWhichIsA("BasePart")
+                    if mgp then
+                        h.CFrame = CFrame.new(mgp.Position + Vector3.new(0,5,0), mgp.Position)
+                        if ct then
+                            pcall(function() ct:FireServer("Talk", mg) end)
+                            pcall(function() ct:FireServer(mg) end)
+                            pcall(function() ct:FireServer("StartQuest", mg.Name) end)
+                        end
+                        task.wait(0.3)
+                        farmPhase = "kill"
+                        farmTimer = 0
+                    end
+                end
+            end
+        elseif farmPhase == "kill" then
+            -- kill mobs in range
+            local r = fState.farmRad or 150
+            local mobs = getMobs(r)
+            if #mobs > 0 then
+                local m = mobs[1]
+                h.CFrame = CFrame.new(m.hrp.Position + Vector3.new(0,3,0), m.hrp.Position)
+                m.hum.Health = 0
+            else
+                -- look further
+                local far = getMobs(600)
+                if #far > 0 then
+                    h.CFrame = CFrame.new(far[1].hrp.Position + Vector3.new(0,10,0), far[1].hrp.Position)
+                end
+            end
+            -- after ~60s go turn in
+            if farmTimer > 600 then
+                farmPhase = "turnin"
+                farmTimer = 0
+            end
+        elseif farmPhase == "turnin" then
+            -- tp to mission giver and turn in
+            if mgs then
+                local mg = mgs:FindFirstChildWhichIsA("Model")
+                if mg then
+                    local mgp = mg:FindFirstChild("HumanoidRootPart") or mg:FindFirstChildWhichIsA("BasePart")
+                    if mgp then
+                        h.CFrame = CFrame.new(mgp.Position + Vector3.new(0,5,0), mgp.Position)
+                        if ct then
+                            pcall(function() ct:FireServer("Talk", mg) end)
+                            pcall(function() ct:FireServer("CompleteQuest", mg.Name) end)
+                            pcall(function() ct:FireServer(mg) end)
+                        end
+                        task.wait(0.3)
+                        farmPhase = "quest"
+                        farmTimer = 0
+                    end
+                else
+                    farmPhase = "quest"
+                end
+            else
+                -- no mission givers found, just kill
+                farmPhase = "kill"
             end
         end
         task.wait(0.1)
@@ -449,7 +509,14 @@ local function mkTog(con, txt, get, set)
 end
 
 local function upSt()
-    st.Text = "K:"..tostring(fState.kill and "ON" or "OFF").." G:"..tostring(fState.god and "ON" or "OFF").." F:"..tostring(fState.farm and "ON" or "OFF").." A:"..tostring(fState.aim and "ON" or "OFF").." E:"..tostring(fState.esp and "ON" or "OFF")
+    local parts = {}
+    if fState.farm then table.insert(parts, "Farm:"..farmPhase) end
+    if fState.kill then table.insert(parts, "Kill") end
+    if fState.god then table.insert(parts, "God") end
+    if fState.aim then table.insert(parts, "Aim") end
+    if fState.esp then table.insert(parts, "ESP") end
+    if fState.fly then table.insert(parts, "Fly") end
+    st.Text = #parts > 0 and table.concat(parts, " ") or "idle"
 end
 
 -- populate
