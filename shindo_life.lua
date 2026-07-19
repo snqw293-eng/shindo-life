@@ -104,7 +104,29 @@ local function getDrops(r)
     return out
 end
 
-local godCon
+local function doAtk()
+    pcall(function()
+        local c = gC()
+        if c and c:FindFirstChild("combat") and c.combat:FindFirstChild("update") then
+            c.combat.update:FireServer("mouse1", true)
+            task.wait(0.03)
+            c.combat.update:FireServer("mouse1", false)
+        end
+    end)
+    pcall(function() VIM:SendMouseButtonEvent(0, 0, true, nil, 0) end)
+    task.wait(0.03)
+    pcall(function() VIM:SendMouseButtonEvent(0, 0, false, nil, 0) end)
+end
+
+local function killMob(m)
+    if not m or not m.hrp or not m.hum then return end
+    local h = gH()
+    if h then
+        h.CFrame = CFrame.new(m.hrp.Position + Vector3.new(0,3,0), m.hrp.Position)
+    end
+    doAtk()
+    m.hum.Health = 0
+end
 function togGod(on)
     state.god = on
     if godCon then godCon:Disconnect(); godCon = nil end
@@ -129,11 +151,9 @@ function togKill(on)
         if not h then return end
         local mobs = getMobs(state.killRad or 200)
         if #mobs > 0 then
-            local m = mobs[1]
-            h.CFrame = CFrame.new(m.hrp.Position + Vector3.new(0,3,0), m.hrp.Position)
-            m.hum.Health = 0
+            killMob(mobs[1])
         end
-        task.wait(0.08)
+        task.wait(0.1)
     end)
 end
 
@@ -254,12 +274,7 @@ function togFarm(on)
             local target = getQTarget()
             local qmobs = target and findQMobs(target, state.farmRad or 200)
             if #qmobs > 0 then
-                local m = qmobs[1]
-                h.CFrame = CFrame.new(m.hrp.Position + Vector3.new(0,3,0), m.hrp.Position)
-                m.hum.Health = 0
-                pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.One, false, nil) end)
-                task.wait(0.05)
-                pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.One, false, nil) end)
+                killMob(qmobs[1])
             else
                 -- no quest mobs found, stay near mission givers
                 if mgs and farmTimer < 30 then
@@ -315,9 +330,7 @@ function togBoss(on)
         local h = gH(); if not h then return end
         local bosses = getBosses(state.bossRad or 500)
         if #bosses > 0 then
-            local b = bosses[1]
-            h.CFrame = CFrame.new(b.hrp.Position + Vector3.new(0,5,0), b.hrp.Position)
-            b.hum.Health = 0
+            killMob(bosses[1])
         end
         task.wait(0.15)
     end)
